@@ -14,7 +14,7 @@ VERSION=${TAG#v}
 echo "Building citronics-kernel packages $VERSION for $PHONE..."
 ./build-all-kernels.sh "$PHONE" "${2:-}"
 
-DEBS=$(find output/ \( -name "linux-image-*.deb" -o -name "linux-headers-*.deb" \) | grep -v dbg)
+DEBS=$(find output/ \( -name "linux-image-*-citronics-lime-${PHONE}*.deb" -o -name "linux-headers-*-citronics-lime-${PHONE}*.deb" \) | grep -v dbg)
 if [ -z "$DEBS" ]; then
   echo "ERROR: No .deb files found in output/"
   exit 1

@@ -131,8 +131,8 @@ while IFS= read -r line; do
 
   echo "🚧 Building kernel .deb packages for $NAME"
   make -j$(nproc) \
-       LOCALVERSION=$CONFIG_LOCALVERSION \
-       KDEB_PKGVERSION=$PKG_VERSION \
+       LOCALVERSION="$CONFIG_LOCALVERSION" \
+       KDEB_PKGVERSION="$PKG_VERSION" \
        deb-pkg
 
   # Move packages to output
