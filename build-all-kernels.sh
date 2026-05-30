@@ -8,8 +8,6 @@ if [ -z "${1:-}" ]; then
 fi
 PHONE="$1"
 
-ARCH="arm"
-CROSS_COMPILE="arm-linux-gnueabihf-"
 CONFIG_LOCALVERSION="-citronics-lime-${PHONE}"
 
 ROOT_DIR=$(pwd)
@@ -76,6 +74,17 @@ while IFS= read -r line; do
   NAME=$(echo "$line" | awk '{print $2}')
   REPO_URL=$(echo "$line" | awk '{print $3}')
   BRANCH=$(echo "$line" | awk '{print $4}')
+  KERN_ARCH=$(echo "$line" | awk '{print $5}')
+  KERN_ARCH="${KERN_ARCH:-arm}"  # default to arm if column 5 missing
+  
+  if [ "$KERN_ARCH" = "arm64" ]; then
+    ARCH="arm64"
+    CROSS_COMPILE="aarch64-linux-gnu-"
+  else
+    ARCH="arm"
+    CROSS_COMPILE="arm-linux-gnueabihf-"
+  fi
+  
   if [ "$LINE_PHONE" != "$PHONE" ]; then continue; fi
 
   # If filter is set, skip non-matching kernels
