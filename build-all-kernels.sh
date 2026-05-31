@@ -75,7 +75,7 @@ while IFS= read -r line; do
   REPO_URL=$(echo "$line" | awk '{print $3}')
   BRANCH=$(echo "$line" | awk '{print $4}')
   KERN_ARCH=$(echo "$line" | awk '{print $5}')
-  KERN_ARCH="${KERN_ARCH:-arm}"  # default to arm if column 5 missing
+  KERN_ARCH="${KERN_ARCH:-arm}"
   COMPONENT=$(echo "$line" | awk '{print $6}')
   COMPONENT="${COMPONENT:-main}"
   
