@@ -115,6 +115,7 @@ while IFS= read -r line; do
   if [ -d "$SOURCE_DIR/.git" ]; then
     echo "   Fetching updates..."
     git -C "$SOURCE_DIR" fetch origin "$BRANCH"
+    git -C "$SOURCE_DIR" checkout FETCH_HEAD -- .
   else
     echo "   Cloning..."
     rm -rf "$SOURCE_DIR"
@@ -126,7 +127,6 @@ while IFS= read -r line; do
   mkdir -p "$BUILD_DIR"
 
   # Copy source to build dir (avoid polluting the cached clone)
-  git -C "$SOURCE_DIR" checkout "origin/$BRANCH" -- .
   cp -a "$SOURCE_DIR/." "$BUILD_DIR/"
 
   cd "$BUILD_DIR"
