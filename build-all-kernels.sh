@@ -76,6 +76,8 @@ while IFS= read -r line; do
   BRANCH=$(echo "$line" | awk '{print $4}')
   KERN_ARCH=$(echo "$line" | awk '{print $5}')
   KERN_ARCH="${KERN_ARCH:-arm}"  # default to arm if column 5 missing
+  COMPONENT=$(echo "$line" | awk '{print $6}')
+  COMPONENT="${COMPONENT:-main}"
   
   if [ "$KERN_ARCH" = "arm64" ]; then
     ARCH="arm64"
@@ -107,6 +109,7 @@ while IFS= read -r line; do
   echo "🔁 Building kernel: $NAME"
   echo "   Repo:   $REPO_URL (branch: $BRANCH)"
   echo "   Config: $CONFIG_FILE"
+  echo "   Component: $COMPONENT"
 
   # Clone or fetch the kernel source
   if [ -d "$SOURCE_DIR/.git" ]; then
