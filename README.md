@@ -52,5 +52,11 @@ The script clones the source, applies the configuration, and produces Debian pac
 
 ## Links
 
-- [deb-packages](https://github.com/Citronics/deb-packages): APT repository management.
+- [deb-packages](https://github.com/Citronics/deb-packages): APT repository management — live at `https://citronics.github.io/deb-packages/`.
 - [debos-citronics](https://github.com/Citronics/debos-citronics): OS image builder.
+
+## FP2 Kernel Note
+
+The FP2 kernel is not published to the APT repository — it is delivered via `local-debs` in the debos recipe.
+This is intentional: FP2 kernel images are large and board-specific, and are embedded directly in the OS image build process.
+The `release.sh` script is structured to loop all boards, so when a future FP2 kernel APT release is desired, it will be built and published automatically.
