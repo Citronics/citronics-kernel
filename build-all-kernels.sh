@@ -119,7 +119,7 @@ while IFS= read -r line; do
   else
     echo "   Cloning..."
     rm -rf "$SOURCE_DIR"
-    git clone --single-branch --branch "$BRANCH" "$REPO_URL" "$SOURCE_DIR"
+    git clone --depth 1 --single-branch --branch "$BRANCH" "$REPO_URL" "$SOURCE_DIR"
   fi
 
   # Clean up any previous build dir
