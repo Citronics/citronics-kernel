@@ -7,9 +7,36 @@ TAG=$(git describe --tags --exact-match 2>/dev/null) || {
 }
 VERSION=${TAG#v}
 
-echo "Building citronics-kernel $VERSION for all boards..."
+# Tags like v3.2-rc1 are release candidates: build only the rc-component
+# kernels and publish as a GitHub prerelease. Normal tags build everything
+# except rc kernels, exactly as before rc support existed.
+PRERELEASE_FLAG=""
+if [[ "$TAG" == *-rc* ]]; then
+  PRERELEASE_FLAG="--prerelease"
+  export ONLY_COMPONENT="rc"
+  echo "Release candidate tag detected: building rc kernels only, publishing as a prerelease."
+else
+  export SKIP_COMPONENT="rc"
+fi
 
-PHONES=$(awk '!/^[[:space:]]*#/ && NF {print $1}' kernels.conf | sort -u)
+echo "Building citronics-kernel $VERSION..."
+
+PHONES=$(awk -v only="${ONLY_COMPONENT:-}" -v skip="${SKIP_COMPONENT:-}" '
+  !/^[[:space:]]*#/ && NF {
+    comp = (NF >= 6) ? $6 : "main"
+    if (only != "" && comp != only) next
+    if (skip != "" && comp == skip) next
+    print $1
+  }' kernels.conf | sort -u)
+
+if [ -z "$PHONES" ]; then
+  echo "ERROR: no kernels.conf entries match this release type" >&2
+  exit 1
+fi
+
+# Start from a clean output tree so stale artifacts from a previous
+# release type are never attached to this release.
+rm -rf output/
 
 for PHONE in $PHONES; do
   echo "Building kernels for $PHONE..."
@@ -29,17 +56,28 @@ NOTES="Kernel images and headers for all boards — version $VERSION"$'\n'$'\n'"
 
 MAIN_KERNELS=""
 EXPERIMENTAL_KERNELS=""
+RC_KERNELS=""
 
 while IFS= read -r line; do
   [[ "$line" =~ ^[[:space:]]*# ]] && continue
   [[ -z "${line// /}" ]] && continue
-  
+
   NAME=$(echo "$line" | awk '{print $2}')
   COMPONENT=$(echo "$line" | awk '{print $6}')
   COMPONENT="${COMPONENT:-main}"
-  
+
+  # Keep the notes consistent with what was actually built
+  if [ -n "${ONLY_COMPONENT:-}" ] && [ "$COMPONENT" != "$ONLY_COMPONENT" ]; then
+    continue
+  fi
+  if [ -n "${SKIP_COMPONENT:-}" ] && [ "$COMPONENT" = "$SKIP_COMPONENT" ]; then
+    continue
+  fi
+
   if [ "$COMPONENT" = "main" ]; then
     MAIN_KERNELS="$MAIN_KERNELS$NAME"$'\n'
+  elif [ "$COMPONENT" = "rc" ]; then
+    RC_KERNELS="$RC_KERNELS$NAME"$'\n'
   else
     EXPERIMENTAL_KERNELS="$EXPERIMENTAL_KERNELS$NAME"$'\n'
   fi
@@ -47,6 +85,10 @@ done < kernels.conf
 
 if [ -n "$MAIN_KERNELS" ]; then
   NOTES="${NOTES}Stable (main):"$'\n'"$MAIN_KERNELS"$'\n'
+fi
+
+if [ -n "$RC_KERNELS" ]; then
+  NOTES="${NOTES}Release candidate (rc):"$'\n'"$RC_KERNELS"$'\n'
 fi
 
 if [ -n "$EXPERIMENTAL_KERNELS" ]; then
@@ -58,6 +100,7 @@ echo "Creating GitHub release $TAG..."
 gh release create "$TAG" $DEBS \
   --repo Citronics/citronics-kernel \
   --title "citronics-kernel $VERSION" \
-  --notes "$NOTES"
+  --notes "$NOTES" \
+  $PRERELEASE_FLAG
 
 echo "Done. Release $TAG published."

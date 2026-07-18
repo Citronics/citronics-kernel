@@ -44,6 +44,22 @@ The script clones the source, applies the configuration, and produces Debian pac
 
 3. After the release is complete, trigger the [deb-packages](https://github.com/Citronics/deb-packages) CI workflow to update the APT repository.
 
+### Release candidates
+
+Kernels marked with the `rc` component in `kernels.conf` are release candidates.
+They are **excluded from normal releases**, so adding an `rc` entry never changes
+what an ordinary tag ships. To publish the rc kernels, tag with an `-rcN` suffix:
+
+```bash
+git tag v3.2-rc1
+./release.sh
+```
+
+An `-rc` tag makes `release.sh` build **only** the `rc` kernels and publish the
+GitHub release as a **prerelease**. The `.deb` version uses `~rc` (e.g. `3.2~rc1`)
+so dpkg sorts it before the final release. Once validated, promote the kernel by
+moving its entry to `main` (or `experimental`) and tagging a final version.
+
 ## Adding a New Kernel Config
 
 1. Add an entry to `kernels.conf` following this format:

@@ -15,6 +15,8 @@ ROOT_DIR=$(pwd)
 TAG=$(git describe --tags --exact-match 2>/dev/null) || TAG=""
 if [ -n "$TAG" ]; then
   PKG_VERSION=${TAG#v}
+  # Release candidates: v3.2-rc1 -> 3.2~rc1 so dpkg sorts the RC before the final 3.2
+  PKG_VERSION=${PKG_VERSION//-rc/\~rc}
 else
   PKG_VERSION=$(git describe --tags --always 2>/dev/null || echo "0.0")
   PKG_VERSION=${PKG_VERSION#v}
@@ -91,6 +93,15 @@ while IFS= read -r line; do
 
   # If filter is set, skip non-matching kernels
   if [ -n "$FILTER" ] && [ "$NAME" != "$FILTER" ]; then
+    continue
+  fi
+
+  # Optional component filtering (set by release.sh for rc releases).
+  # Both unset -> build everything, unchanged behaviour.
+  if [ -n "${ONLY_COMPONENT:-}" ] && [ "$COMPONENT" != "$ONLY_COMPONENT" ]; then
+    continue
+  fi
+  if [ -n "${SKIP_COMPONENT:-}" ] && [ "$COMPONENT" = "$SKIP_COMPONENT" ]; then
     continue
   fi
 
