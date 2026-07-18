@@ -34,16 +34,28 @@ if [ -z "$PHONES" ]; then
   exit 1
 fi
 
-# Start from a clean output tree so stale artifacts from a previous
-# release type are never attached to this release.
-rm -rf output/
-
 for PHONE in $PHONES; do
   echo "Building kernels for $PHONE..."
   ./build-all-kernels.sh "$PHONE"
 done
 
-DEBS=$(find output/ \( -name "linux-image-*.deb" -o -name "linux-headers-*.deb" \) | grep -v dbg | grep -v libc)
+# Collect artifacts only from the kernels built for this release so stale
+# output dirs (other release types, manual backups) are never attached.
+NAMES=$(awk -v only="${ONLY_COMPONENT:-}" -v skip="${SKIP_COMPONENT:-}" '
+  !/^[[:space:]]*#/ && NF {
+    comp = (NF >= 6) ? $6 : "main"
+    if (only != "" && comp != only) next
+    if (skip != "" && comp == skip) next
+    print $2
+  }' kernels.conf | sort -u)
+
+DEBS=""
+for NAME in $NAMES; do
+  [ -d "output/$NAME" ] || continue
+  FOUND=$(find "output/$NAME" \( -name "linux-image-*.deb" -o -name "linux-headers-*.deb" \) ! -name "*dbg*" ! -name "*libc*")
+  DEBS="$DEBS$FOUND"$'\n'
+done
+DEBS=$(printf '%s' "$DEBS" | sed '/^$/d')
 if [ -z "$DEBS" ]; then
   echo "ERROR: No .deb files found in output/" >&2
   exit 1
