@@ -1,0 +1,89 @@
+name: build-release
+
+# Build and publish the rc kernel debs automatically whenever the kernel
+# fork's 6.18/rc branch moves (repository_dispatch sent by
+# mlainez/linux-msm8x74's notify-kernel-build workflow), or on demand.
+#
+# Versioning: the workflow auto-tags the next ".N" suffix on the latest
+# tag (v3.2-rc3 -> v3.2-rc3.1 -> v3.2-rc3.2 ...) so release.sh keeps its
+# tag-driven contract and apt sees a monotonically increasing version.
+# Human-cut tags (vX.Y, vX.Y-rcN) keep working exactly as before.
+#
+# After publishing, dispatches update-repo to Citronics/deb-packages
+# (APT_DISPATCH_TOKEN secret), which refreshes the APT repository and in
+# turn triggers the debos image rebuild. Skips gracefully if unset.
+
+on:
+  repository_dispatch:
+    types: [kernel-rc-updated]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-release
+  cancel-in-progress: false
+
+jobs:
+  build-release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup || true
+          df -h / | tail -1
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            gcc-arm-linux-gnueabihf gcc-aarch64-linux-gnu \
+            flex bison bc libssl-dev libelf-dev kmod cpio rsync \
+            debhelper fakeroot dpkg-dev
+
+      - name: Auto-tag next build number
+        id: tag
+        run: |
+          git config user.name  "Marc Lainez"
+          git config user.email "marc.lainez@gmail.com"
+          LATEST=$(git tag --sort=-creatordate | grep -E '^v[0-9]' | head -1)
+          # Human tags are vX.Y or vX.Y-rcN; anything longer carries an
+          # auto ".N" build suffix that must be stripped to find the base.
+          if echo "$LATEST" | grep -qE '^v[0-9]+\.[0-9]+(-rc[0-9]+)?$'; then
+            BASE="$LATEST"
+          else
+            BASE=$(echo "$LATEST" | sed -E 's/\.[0-9]+$//')
+          fi
+          N=$(git tag | grep -cE "^${BASE//./\\.}\.[0-9]+$" || true)
+          NEXT="${BASE}.$((N + 1))"
+          git tag "$NEXT"
+          git push origin "$NEXT"
+          echo "tag=$NEXT" >> "$GITHUB_OUTPUT"
+          echo "Tagged $NEXT (base $BASE)"
+
+      - name: Build and release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: ./release.sh
+
+      - name: Trigger APT repository update
+        env:
+          APT_DISPATCH_TOKEN: ${{ secrets.APT_DISPATCH_TOKEN }}
+        run: |
+          if [ -z "$APT_DISPATCH_TOKEN" ]; then
+            echo "APT_DISPATCH_TOKEN not set — skipping APT update dispatch"
+            exit 0
+          fi
+          curl -sf -X POST \
+            -H "Authorization: Bearer $APT_DISPATCH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            https://api.github.com/repos/Citronics/deb-packages/dispatches \
+            -d '{"event_type":"update-repo"}'
+          echo "Dispatched update-repo."
