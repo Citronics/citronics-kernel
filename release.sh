@@ -1,7 +1,11 @@
 #!/bin/bash
 set -e
 
-TAG=$(git describe --tags --exact-match 2>/dev/null) || {
+# RELEASE_TAG lets CI pass the tag it just created explicitly: when several
+# tags point at the same commit (auto-build tags on an unchanged master),
+# git describe picks an arbitrary one and the release collides.
+TAG=${RELEASE_TAG:-$(git describe --tags --exact-match 2>/dev/null)} || true
+[ -n "$TAG" ] || {
   echo "ERROR: No git tag on current commit. Tag first: git tag v2.1" >&2
   exit 1
 }
