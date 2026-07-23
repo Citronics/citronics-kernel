@@ -44,7 +44,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            gcc-arm-linux-gnueabihf gcc-aarch64-linux-gnu \
+            gcc-arm-linux-gnueabihf gcc-aarch64-linux-gnu build-essential libdw-dev \
             flex bison bc libssl-dev libelf-dev kmod cpio rsync \
             debhelper fakeroot dpkg-dev
 

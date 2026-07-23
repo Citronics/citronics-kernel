@@ -153,9 +153,14 @@ while IFS= read -r line; do
   make olddefconfig
 
   echo "🚧 Building kernel .deb packages for $NAME"
+  # DPKG_FLAGS=-d: older kbuild (<= 6.15) generates cross-unfriendly
+  # Build-Depends (unannotated libssl-dev resolves to the host arch), so
+  # dpkg-checkbuilddeps fails on a cross runner even with all real deps
+  # installed. 6.18+ annotates :native correctly; -d is a no-op there.
   make -j$(nproc) \
        LOCALVERSION="$CONFIG_LOCALVERSION" \
        KDEB_PKGVERSION="$PKG_VERSION" \
+       DPKG_FLAGS="-d" \
        deb-pkg
 
   # Move packages to output
