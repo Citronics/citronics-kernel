@@ -49,11 +49,11 @@ jobs:
             flex bison bc libssl-dev libelf-dev kmod cpio rsync \
             debhelper fakeroot dpkg-dev
 
-      - name: Auto-tag next build number
-        id: tag
+      # Decide what this release would contain *before* creating a tag, so an
+      # unchanged run costs neither a tag nor a build slot.
+      - name: Plan release
+        id: plan
         run: |
-          git config user.name  "Marc Lainez"
-          git config user.email "marc.lainez@gmail.com"
           LATEST=$(git tag --sort=-creatordate | grep -E '^v[0-9]' | head -1)
           # Human tags are vX.Y or vX.Y-rcN; anything longer carries an
           # auto ".N" build suffix that must be stripped to find the base.
@@ -64,18 +64,61 @@ jobs:
           fi
           N=$(git tag | grep -cE "^${BASE//./\\.}\.[0-9]+$" || true)
           NEXT="${BASE}.$((N + 1))"
-          git tag "$NEXT"
-          git push origin "$NEXT"
           echo "tag=$NEXT" >> "$GITHUB_OUTPUT"
-          echo "Tagged $NEXT (base $BASE)"
+          echo "Next tag would be $NEXT (base $BASE)"
+
+          # Same component rule release.sh applies, so detection sees exactly
+          # the set that would be built.
+          case "$BASE" in
+            *-rc*) export ONLY_COMPONENT=rc ;;
+            *)     export SKIP_COMPONENT=rc ;;
+          esac
+
+          ./changed-kernels.sh > /tmp/changed.tsv
+          if [ -s /tmp/changed.tsv ]; then
+            echo "any=true" >> "$GITHUB_OUTPUT"
+            echo "Will build:"; awk '{print "  " $2 " @ " substr($3,1,12)}' /tmp/changed.tsv
+          else
+            echo "any=false" >> "$GITHUB_OUTPUT"
+            echo "Nothing changed - no tag, no build, no release."
+          fi
+
+      - name: Tag this build
+        if: steps.plan.outputs.any == 'true'
+        run: |
+          git config user.name  "Marc Lainez"
+          git config user.email "marc.lainez@gmail.com"
+          git tag "${{ steps.plan.outputs.tag }}"
+          git push origin "${{ steps.plan.outputs.tag }}"
+          echo "Tagged ${{ steps.plan.outputs.tag }}"
 
       - name: Build and release
+        if: steps.plan.outputs.any == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ steps.tag.outputs.tag }}
+          RELEASE_TAG: ${{ steps.plan.outputs.tag }}
+          CHANGED_TSV: /tmp/changed.tsv
         run: ./release.sh
 
+      # release.sh rewrites build-state.tsv only after the release succeeded.
+      - name: Record what was built
+        if: steps.plan.outputs.any == 'true'
+        run: |
+          git config user.name  "Marc Lainez"
+          git config user.email "marc.lainez@gmail.com"
+          if git diff --quiet -- build-state.tsv; then
+            echo "build-state.tsv unchanged"
+            exit 0
+          fi
+          git add build-state.tsv
+          git commit -m "build-state: record ${{ steps.plan.outputs.tag }}"
+          # The branch may have moved (another release, a config edit) while we
+          # were building; rebase rather than clobber.
+          git pull --rebase --autostash origin "${GITHUB_REF_NAME}"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
+
       - name: Trigger APT repository update
+        if: steps.plan.outputs.any == 'true'
         env:
           APT_DISPATCH_TOKEN: ${{ secrets.APT_DISPATCH_TOKEN }}
         run: |

@@ -25,18 +25,29 @@ fi
 
 echo "Building citronics-kernel $VERSION..."
 
-PHONES=$(awk -v only="${ONLY_COMPONENT:-}" -v skip="${SKIP_COMPONENT:-}" '
-  !/^[[:space:]]*#/ && NF {
-    comp = (NF >= 6) ? $6 : "main"
-    if (only != "" && comp != only) next
-    if (skip != "" && comp == skip) next
-    print $1
-  }' kernels.conf | sort -u)
-
-if [ -z "$PHONES" ]; then
-  echo "ERROR: no kernels.conf entries match this release type" >&2
-  exit 1
+# Only rebuild what actually moved. changed-kernels.sh compares each entry's
+# upstream commit and its config hash against build-state.tsv; CI passes the
+# result in through CHANGED_TSV so the branch cannot shift between the check and
+# the build. Skipping is safe for APT: deb-packages/update-repo collects assets
+# from every release, so a kernel that is not rebuilt stays available from the
+# release that built it.
+CHANGED_TSV=${CHANGED_TSV:-}
+if [ -z "$CHANGED_TSV" ]; then
+  CHANGED_TSV=$(mktemp)
+  ./changed-kernels.sh > "$CHANGED_TSV"
 fi
+
+if [ ! -s "$CHANGED_TSV" ]; then
+  echo "No kernel source or config changed for this release type - nothing to build."
+  echo "Not creating a release."
+  exit 0
+fi
+
+ONLY_KERNELS=$(awk '{print $2}' "$CHANGED_TSV" | sort -u | tr '\n' ' ')
+export ONLY_KERNELS
+echo "Kernels to build:$ONLY_KERNELS"
+
+PHONES=$(awk '{print $1}' "$CHANGED_TSV" | sort -u)
 
 for PHONE in $PHONES; do
   echo "Building kernels for $PHONE..."
@@ -45,13 +56,7 @@ done
 
 # Collect artifacts only from the kernels built for this release so stale
 # output dirs (other release types, manual backups) are never attached.
-NAMES=$(awk -v only="${ONLY_COMPONENT:-}" -v skip="${SKIP_COMPONENT:-}" '
-  !/^[[:space:]]*#/ && NF {
-    comp = (NF >= 6) ? $6 : "main"
-    if (only != "" && comp != only) next
-    if (skip != "" && comp == skip) next
-    print $2
-  }' kernels.conf | sort -u)
+NAMES=$(awk '{print $2}' "$CHANGED_TSV" | sort -u)
 
 DEBS=""
 for NAME in $NAMES; do
@@ -83,12 +88,10 @@ while IFS= read -r line; do
   COMPONENT="${COMPONENT:-main}"
 
   # Keep the notes consistent with what was actually built
-  if [ -n "${ONLY_COMPONENT:-}" ] && [ "$COMPONENT" != "$ONLY_COMPONENT" ]; then
-    continue
-  fi
-  if [ -n "${SKIP_COMPONENT:-}" ] && [ "$COMPONENT" = "$SKIP_COMPONENT" ]; then
-    continue
-  fi
+  case " $ONLY_KERNELS " in
+    *" $NAME "*) ;;
+    *) continue ;;
+  esac
 
   if [ "$COMPONENT" = "main" ]; then
     MAIN_KERNELS="$MAIN_KERNELS$NAME"$'\n'
@@ -118,5 +121,22 @@ gh release create "$TAG" $DEBS \
   --title "citronics-kernel $VERSION" \
   --notes "$NOTES" \
   $PRERELEASE_FLAG
+
+# Record what this release built so the next run can skip it. Written only after
+# gh release create succeeded: a failed release must not mark a kernel as built.
+STATE_FILE=${BUILD_STATE_FILE:-build-state.tsv}
+TMP_STATE=$(mktemp)
+{
+  echo "# kernel-name	source-sha	config-hash - written by release.sh, consumed by changed-kernels.sh"
+  # keep entries this release did not touch
+  if [ -f "$STATE_FILE" ]; then
+    awk 'NR==FNR { built[$2]=1; next } !/^#/ && NF && !($1 in built) { print }' \
+      "$CHANGED_TSV" "$STATE_FILE"
+  fi
+  awk '{ printf "%s\t%s\t%s\n", $2, $3, $4 }' "$CHANGED_TSV"
+} > "$TMP_STATE"
+mv "$TMP_STATE" "$STATE_FILE"
+echo "Updated $STATE_FILE:"
+cat "$STATE_FILE"
 
 echo "Done. Release $TAG published."
