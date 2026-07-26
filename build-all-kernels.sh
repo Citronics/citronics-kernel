@@ -96,6 +96,15 @@ while IFS= read -r line; do
     continue
   fi
 
+  # Restrict to a set of kernel names (set by release.sh from
+  # changed-kernels.sh, so unchanged kernels are not rebuilt).
+  if [ -n "${ONLY_KERNELS:-}" ]; then
+    case " $ONLY_KERNELS " in
+      *" $NAME "*) ;;
+      *) echo "   skipping $NAME (unchanged)"; continue ;;
+    esac
+  fi
+
   # Optional component filtering (set by release.sh for rc releases).
   # Both unset -> build everything, unchanged behaviour.
   if [ -n "${ONLY_COMPONENT:-}" ] && [ "$COMPONENT" != "$ONLY_COMPONENT" ]; then
@@ -126,7 +135,12 @@ while IFS= read -r line; do
   if [ -d "$SOURCE_DIR/.git" ]; then
     echo "   Fetching updates..."
     git -C "$SOURCE_DIR" fetch origin "$BRANCH"
-    git -C "$SOURCE_DIR" checkout FETCH_HEAD -- .
+    # reset --hard, not "checkout FETCH_HEAD -- .": the latter updates the
+    # working tree but leaves HEAD where it was, so scripts/setlocalversion
+    # stamps the package with the *previous* commit while the source is new.
+    # CI always takes the clone path below, so this only ever bit local rebuilds
+    # - which is exactly where a wrong -g<sha> suffix is hardest to notice.
+    git -C "$SOURCE_DIR" reset --hard FETCH_HEAD
   else
     echo "   Cloning..."
     rm -rf "$SOURCE_DIR"
