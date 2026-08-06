@@ -62,8 +62,19 @@ jobs:
           else
             BASE=$(echo "$LATEST" | sed -E 's/\.[0-9]+$//')
           fi
-          N=$(git tag | grep -cE "^${BASE//./\\.}\.[0-9]+$" || true)
-          NEXT="${BASE}.$((N + 1))"
+          # Take the HIGHEST existing suffix, not the count of them: the
+          # sequence has gaps (deleted tags, failed builds), so counting
+          # produces a number that already exists and `git tag` fails with
+          # "tag already exists" - as it did for v3.2-rc3.9 when 8 tags
+          # existed but the highest was .15.  Sort numerically, not
+          # lexicographically, or .9 outranks .15.
+          MAX=$(git tag | grep -E "^${BASE//./\\.}\.[0-9]+$" \
+                        | sed -E 's/.*\.([0-9]+)$/\1/' | sort -n | tail -1)
+          NEXT="${BASE}.$(( ${MAX:-0} + 1 ))"
+          # Belt and braces: never hand an existing tag to `git tag`.
+          while git rev-parse -q --verify "refs/tags/$NEXT" >/dev/null; do
+            MAX=$((MAX + 1)); NEXT="${BASE}.$((MAX + 1))"
+          done
           echo "tag=$NEXT" >> "$GITHUB_OUTPUT"
           echo "Next tag would be $NEXT (base $BASE)"
 
