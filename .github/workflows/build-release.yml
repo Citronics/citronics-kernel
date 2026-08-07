@@ -10,12 +10,33 @@ name: build-release
 # Human-cut tags (vX.Y, vX.Y-rcN) keep working exactly as before.
 #
 # After publishing, dispatches update-repo to Citronics/deb-packages
-# (APT_DISPATCH_TOKEN secret), which refreshes the APT repository and in
-# turn triggers the debos image rebuild. Skips gracefully if unset.
+# (APT_DISPATCH_TOKEN secret), which refreshes the APT repository and in turn
+# triggers the debos image rebuild. That hop is cross-repository, so the
+# automatic GITHUB_TOKEN cannot do it - it is scoped to this repo alone. Without
+# the secret the debs are published to GitHub Releases but apt never learns
+# about them, so no device can install them; the step therefore FAILS rather
+# than skipping, because a release users cannot install is not a release.
 
 on:
   repository_dispatch:
     types: [kernel-rc-updated]
+  # A config-only change must rebuild as well. changed-kernels.sh already hashes
+  # configs/<name>.config for exactly this reason, but nothing ever *invoked*
+  # the workflow on such a push, so the detection never got the chance to run:
+  # the fix to configs/msm8x74-6.12-rc.config that added the missing Krait clock
+  # drivers (without which the board boots with no cpufreq at all) sat unbuilt,
+  # and the published deb kept shipping the broken config for a day.
+  #
+  # build-state.tsv is deliberately NOT listed: this workflow commits that file
+  # itself, and matching it here would make every release trigger another one.
+  push:
+    branches: [master]
+    paths:
+      - 'configs/**'
+      - 'kernels.conf'
+      - 'changed-kernels.sh'
+      - 'release.sh'
+      - 'build-all-kernels.sh'
   workflow_dispatch:
 
 permissions:
@@ -134,8 +155,17 @@ jobs:
           APT_DISPATCH_TOKEN: ${{ secrets.APT_DISPATCH_TOKEN }}
         run: |
           if [ -z "$APT_DISPATCH_TOKEN" ]; then
-            echo "APT_DISPATCH_TOKEN not set — skipping APT update dispatch"
-            exit 0
+            echo "::error title=APT repository was NOT refreshed::The debs for" \
+                 "${{ steps.plan.outputs.tag }} are published as a GitHub release," \
+                 "but apt clients cannot see them because APT_DISPATCH_TOKEN is" \
+                 "unset, so Citronics/deb-packages was never told to regenerate" \
+                 "the index. Fix: create a fine-grained PAT (resource owner" \
+                 "Citronics, repository Citronics/deb-packages, Contents:" \
+                 "read+write) and add it as the organisation secret" \
+                 "APT_DISPATCH_TOKEN for this repo. Until then, run:" \
+                 "gh api -X POST repos/Citronics/deb-packages/dispatches" \
+                 "-f event_type=update-repo"
+            exit 1
           fi
           curl -sf -X POST \
             -H "Authorization: Bearer $APT_DISPATCH_TOKEN" \
