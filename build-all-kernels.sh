@@ -171,11 +171,14 @@ while IFS= read -r line; do
   # Build-Depends (unannotated libssl-dev resolves to the host arch), so
   # dpkg-checkbuilddeps fails on a cross runner even with all real deps
   # installed. 6.18+ annotates :native correctly; -d is a no-op there.
+  # bindeb-pkg, not deb-pkg: only the binary debs are released, and the
+  # source package kbuild would also build is "3.0 (quilt)", which dpkg-source
+  # >= 1.23 rejects for a version without a Debian revision (3.2~rc3.19).
   make -j$(nproc) \
        LOCALVERSION="$CONFIG_LOCALVERSION" \
        KDEB_PKGVERSION="$PKG_VERSION" \
        DPKG_FLAGS="-d" \
-       deb-pkg
+       bindeb-pkg
 
   # Move packages to output
   mkdir -p "$OUTPUT_DIR"
