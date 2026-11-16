@@ -80,6 +80,7 @@ while IFS= read -r line; do
   KERN_ARCH="${KERN_ARCH:-arm}"
   COMPONENT=$(echo "$line" | awk '{print $6}')
   COMPONENT="${COMPONENT:-main}"
+  FLAGS=$(echo "$line" | awk '{print $7}')
   
   if [ "$KERN_ARCH" = "arm64" ]; then
     ARCH="arm64"
@@ -187,6 +188,35 @@ while IFS= read -r line; do
   mv ../*.deb "$OUTPUT_DIR/" 2>/dev/null || true
 
   rm -f "$OUTPUT_DIR"/*-dbg_*.deb "$OUTPUT_DIR"/linux-libc-dev_*.deb
+
+  # The phone's default kernel ("meta" in kernels.conf) also gets the
+  # linux-image-citronics-lime-<phone> meta-package: it depends on this exact
+  # kernel package, so installing a newer meta upgrades devices to the kernel
+  # of this release.
+  if [ "$FLAGS" = "meta" ]; then
+    KREL=$(make -s -C "$BUILD_DIR" LOCALVERSION="$CONFIG_LOCALVERSION" kernelrelease)
+    if [ "$KERN_ARCH" = "arm64" ]; then DEB_ARCH=arm64; else DEB_ARCH=armhf; fi
+    META="linux-image-citronics-lime-${PHONE}"
+    META_DIR=$(mktemp -d)
+    chmod 0755 "$META_DIR"
+    mkdir -p "$META_DIR/DEBIAN" "$META_DIR/usr/share/doc/$META"
+    cat > "$META_DIR/DEBIAN/control" <<CONTROL
+Package: $META
+Version: $PKG_VERSION
+Architecture: $DEB_ARCH
+Maintainer: Citronics <info@citronics.eu>
+Depends: linux-image-$KREL (= $PKG_VERSION)
+Section: kernel
+Priority: optional
+Description: Citronics Lime kernel for ${PHONE} (meta-package)
+ Depends on the current Citronics Lime kernel for ${PHONE}, $KREL, built
+ from $NAME. Upgrading this package upgrades the kernel.
+CONTROL
+    printf 'This meta-package contains no files of its own; the kernel it depends on\nis licensed under GPL-2.0 (see the linux-image-%s package).\n' "$KREL" \
+      > "$META_DIR/usr/share/doc/$META/copyright"
+    dpkg-deb --root-owner-group --build "$META_DIR" "$OUTPUT_DIR/${META}_${PKG_VERSION}_${DEB_ARCH}.deb"
+    rm -rf "$META_DIR"
+  fi
 
   BUILD_COUNT=$((BUILD_COUNT + 1))
   echo "✅ Done: $OUTPUT_DIR"
