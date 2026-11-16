@@ -71,6 +71,11 @@ jobs:
             libc6-dev-armhf-cross libc6-dev-arm64-cross \
             flex bison bc libssl-dev libelf-dev kmod cpio rsync \
             debhelper fakeroot dpkg-dev
+          # Ubuntu 26.04 ships the uutils coreutils, whose install -D races
+          # when kbuild installs the device trees in parallel ("cannot create
+          # directory"); the kernel build expects GNU coreutils.
+          sudo apt-get install -y --no-install-recommends coreutils-from-gnu
+          install --version | head -1
 
       # Decide what this release would contain *before* creating a tag, so an
       # unchanged run costs neither a tag nor a build slot.
