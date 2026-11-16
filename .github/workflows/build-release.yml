@@ -48,7 +48,9 @@ concurrency:
 
 jobs:
   build-release:
-    runs-on: ubuntu-latest
+    # Pinned to the LTS the Ubuntu images target (resolute): ubuntu-latest
+    # would move to releases that may no longer ship armhf.
+    runs-on: ubuntu-26.04
     timeout-minutes: 300
     steps:
       - name: Checkout
