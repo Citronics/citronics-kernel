@@ -11,17 +11,8 @@ TAG=${RELEASE_TAG:-$(git describe --tags --exact-match 2>/dev/null)} || true
 }
 VERSION=${TAG#v}
 
-# Tags like v3.2-rc1 are release candidates: build only the rc-component
-# kernels and publish as a GitHub prerelease. Normal tags build everything
-# except rc kernels, exactly as before rc support existed.
-PRERELEASE_FLAG=""
-if [[ "$TAG" == *-rc* ]]; then
-  PRERELEASE_FLAG="--prerelease"
-  export ONLY_COMPONENT="rc"
-  echo "Release candidate tag detected: building rc kernels only, publishing as a prerelease."
-else
-  export SKIP_COMPONENT="rc"
-fi
+# Every release builds whichever kernels moved, whatever their component:
+# each kernel's component in kernels.conf decides where its packages go.
 
 echo "Building citronics-kernel $VERSION..."
 
@@ -38,7 +29,7 @@ if [ -z "$CHANGED_TSV" ]; then
 fi
 
 if [ ! -s "$CHANGED_TSV" ]; then
-  echo "No kernel source or config changed for this release type - nothing to build."
+  echo "No kernel source or config changed - nothing to build."
   echo "Not creating a release."
   exit 0
 fi
@@ -72,6 +63,33 @@ fi
 
 echo "Packages to release:"
 echo "$DEBS"
+
+component_of() {
+  awk -v n="$1" '!/^[[:space:]]*#/ && $2 == n { print ($6 == "" ? "main" : $6); exit }' kernels.conf
+}
+
+# components.tsv tells deb-packages which APT component each package goes to:
+# main kernels to main, rc and experimental kernels to experimental.
+MANIFEST="$(mktemp -d)/components.tsv"
+while IFS= read -r DEB; do
+  NAME=$(basename "$(dirname "$DEB")")
+  case "$(component_of "$NAME")" in
+    main) APT_COMPONENT=main ;;
+    *)    APT_COMPONENT=experimental ;;
+  esac
+  printf '%s\t%s\n' "$(basename "$DEB")" "$APT_COMPONENT"
+done <<< "$DEBS" | sort > "$MANIFEST"
+echo "APT components:"
+cat "$MANIFEST"
+
+# Only a release that ships a main kernel is a release; anything else is a
+# prerelease on GitHub.
+PRERELEASE_FLAG="--prerelease"
+for NAME in $NAMES; do
+  if [ "$(component_of "$NAME")" = "main" ]; then
+    PRERELEASE_FLAG=""
+  fi
+done
 
 NOTES="Kernel images and headers for all boards — version $VERSION"$'\n'$'\n'"Component breakdown:"$'\n'
 
@@ -116,7 +134,7 @@ fi
 
 echo "Creating GitHub release $TAG..."
 # shellcheck disable=SC2086
-gh release create "$TAG" $DEBS \
+gh release create "$TAG" $DEBS "$MANIFEST" \
   --repo Citronics/citronics-kernel \
   --title "citronics-kernel $VERSION" \
   --notes "$NOTES" \

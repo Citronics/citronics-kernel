@@ -44,26 +44,37 @@ The script clones the source, applies the configuration, and produces Debian pac
 
 3. After the release is complete, trigger the [deb-packages](https://github.com/Citronics/deb-packages) CI workflow to update the APT repository.
 
-### Release candidates
+### Release channels
 
-Kernels marked with the `rc` component in `kernels.conf` are release candidates.
-They are **excluded from normal releases**, so adding an `rc` entry never changes
-what an ordinary tag ships. To publish the rc kernels, tag with an `-rcN` suffix:
+Each kernel's component in `kernels.conf` decides where its packages go:
 
-```bash
-git tag v3.2-rc1
-./release.sh
-```
+| Component | Kernel release | APT component | Devices get it |
+|---|---|---|---|
+| `main` | `6.12.117-citronics-lime-fp2` | `main` | yes, through the `linux-image-citronics-lime-<phone>` meta-package (`meta` flag) |
+| `rc` | `6.12.117-citronics-lime-fp2-rc` | `experimental` | only if they add the `experimental` component |
+| `experimental` | as built | `experimental` | only if they add the `experimental` component |
 
-An `-rc` tag makes `release.sh` build **only** the `rc` kernels and publish the
-GitHub release as a **prerelease**. The `.deb` version uses `~rc` (e.g. `3.2~rc1`)
-so dpkg sorts it before the final release. Once validated, promote the kernel by
-moving its entry to `main` (or `experimental`) and tagging a final version.
+Every release builds whichever kernels moved, whatever their component, and
+lists each package's APT component in its `components.tsv` asset, which
+deb-packages reads. A release without a `main` kernel is published as a
+GitHub prerelease.
+
+Promoting a validated rc to release (FP2 6.12):
+
+1. Validate the rc kernel on a device (install it from `experimental`).
+2. Fast-forward the release branch in the kernel fork:
+   `git push origin 6.12/rc:6.12/release` (no force).
+3. Tag the next version here, e.g. `git tag v3.3 && git push origin v3.3`.
+   Automatic builds then number their tags `v3.3.1`, `v3.3.2`, … and the
+   package versions follow (`3.3.1`).
+4. Run the `build-release` workflow (or let the fork's push trigger it).
+
+Versions must keep increasing: `3.2~rc3.23 < 3.2 < 3.2.1 < 3.3`.
 
 ## Adding a New Kernel Config
 
 1. Add an entry to `kernels.conf` following this format:
-   `<phone> <name> <repo_url> <branch> <arch>`
+   `<phone> <name> <repo_url> <branch> <arch> <component> [meta]`
 2. Create a corresponding kernel config file in `configs/<name>.config`.
 
 ## Links
