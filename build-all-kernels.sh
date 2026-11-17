@@ -35,7 +35,7 @@ if [ ! -f "$KERNELS_CONF" ]; then
   exit 1
 fi
 
-# Allow building a single kernel: ./build-all-kernels.sh <phone> msm8x74-6.15.y
+# Allow building a single kernel: ./build-all-kernels.sh <phone> msm8x74-6.12-rc
 FILTER="${2:-}"
 
 mkdir -p "$SOURCES_DIR"
