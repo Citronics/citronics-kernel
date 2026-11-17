@@ -1,4 +1,4 @@
 # kernel-name	source-sha	config-hash - written by release.sh, consumed by changed-kernels.sh
 msm8x74-6.18-rc	c7e458b30c5771fcd74e1ebecd184f769f0bf8ea	9641837017dc5621
 msm8x74-6.12	32ca2e21d83bb8d942e56998a7722a92401a819a	2fef719ea2cdcbcb
-msm8x74-6.12-rc	6827bc1d634ac86cb845dba4bdcb8ee320177be3	2fef719ea2cdcbcb
+msm8x74-6.12-rc	489befeaf8be7a92aaedd4bf8d09c15ea63945f8	2fef719ea2cdcbcb
