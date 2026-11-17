@@ -35,7 +35,7 @@ if [ ! -f "$KERNELS_CONF" ]; then
   exit 1
 fi
 
-# Allow building a single kernel: ./build-all-kernels.sh <phone> msm8x74-6.15.y
+# Allow building a single kernel: ./build-all-kernels.sh <phone> msm8x74-6.12-rc
 FILTER="${2:-}"
 
 mkdir -p "$SOURCES_DIR"
@@ -106,13 +106,24 @@ while IFS= read -r line; do
     esac
   fi
 
-  # Optional component filtering (set by release.sh for rc releases).
-  # Both unset -> build everything, unchanged behaviour.
+  # Optional component filtering, for local builds. Both unset (as in CI):
+  # build everything.
   if [ -n "${ONLY_COMPONENT:-}" ] && [ "$COMPONENT" != "$ONLY_COMPONENT" ]; then
     continue
   fi
   if [ -n "${SKIP_COMPONENT:-}" ] && [ "$COMPONENT" = "$SKIP_COMPONENT" ]; then
     continue
+  fi
+
+  # An rc kernel gets its own kernel release string, so its packages never
+  # share a name with the release kernel of the same version.
+  LOCALVERSION_SUFFIX="$CONFIG_LOCALVERSION"
+  if [ "$COMPONENT" = "rc" ]; then
+    LOCALVERSION_SUFFIX="${CONFIG_LOCALVERSION}-rc"
+  fi
+  if [ "$FLAGS" = "meta" ] && [ "$COMPONENT" != "main" ]; then
+    echo "ERROR: $NAME is a $COMPONENT kernel; only a main kernel may provide the meta-package" >&2
+    exit 1
   fi
 
   CONFIG_FILE="${CONFIGS_DIR}/${NAME}.config"
@@ -176,7 +187,7 @@ while IFS= read -r line; do
   # source package kbuild would also build is "3.0 (quilt)", which dpkg-source
   # >= 1.23 rejects for a version without a Debian revision (3.2~rc3.19).
   make -j$(nproc) \
-       LOCALVERSION="$CONFIG_LOCALVERSION" \
+       LOCALVERSION="$LOCALVERSION_SUFFIX" \
        KDEB_PKGVERSION="$PKG_VERSION" \
        DPKG_FLAGS="-d" \
        bindeb-pkg
@@ -197,7 +208,7 @@ while IFS= read -r line; do
   # kernel package, so installing a newer meta upgrades devices to the kernel
   # of this release.
   if [ "$FLAGS" = "meta" ]; then
-    KREL=$(make -s -C "$BUILD_DIR" LOCALVERSION="$CONFIG_LOCALVERSION" kernelrelease)
+    KREL=$(make -s -C "$BUILD_DIR" LOCALVERSION="$LOCALVERSION_SUFFIX" kernelrelease)
     if [ "$KERN_ARCH" = "arm64" ]; then DEB_ARCH=arm64; else DEB_ARCH=armhf; fi
     META="linux-image-citronics-lime-${PHONE}"
     META_DIR=$(mktemp -d)

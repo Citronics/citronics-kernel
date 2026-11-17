@@ -1,8 +1,10 @@
 name: build-release
 
-# Build and publish the rc kernel debs automatically whenever the kernel
-# fork's 6.18/rc branch moves (repository_dispatch sent by
-# mlainez/linux-msm8x74's notify-kernel-build workflow), or on demand.
+# Build and publish kernel debs automatically whenever a kernel branch listed
+# in kernels.conf moves (repository_dispatch sent by mlainez/linux-msm8x74's
+# notify-kernel-build and stable-sync workflows), or on demand. Each kernel's
+# component in kernels.conf decides its APT component, recorded in the
+# release's components.tsv for deb-packages.
 #
 # Versioning: the workflow auto-tags the next ".N" suffix on the latest
 # tag (v3.2-rc3 -> v3.2-rc3.1 -> v3.2-rc3.2 ...) so release.sh keeps its
@@ -107,13 +109,6 @@ jobs:
           done
           echo "tag=$NEXT" >> "$GITHUB_OUTPUT"
           echo "Next tag would be $NEXT (base $BASE)"
-
-          # Same component rule release.sh applies, so detection sees exactly
-          # the set that would be built.
-          case "$BASE" in
-            *-rc*) export ONLY_COMPONENT=rc ;;
-            *)     export SKIP_COMPONENT=rc ;;
-          esac
 
           ./changed-kernels.sh > /tmp/changed.tsv
           if [ -s /tmp/changed.tsv ]; then
