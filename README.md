@@ -5,7 +5,7 @@ Kernel packaging for Citronics boards. This repository builds `.deb` packages fr
 ## Supported Devices
 
 - **FP2**: armhf architecture, using `msm8974` or `msm8x74` kernel configurations.
-- **FP3**: arm64 architecture, using `msm8953-staging`.
+- **FP3**: arm64 architecture, using `msm8953-6.18` (`6.18/staging` of mlainez/linux-msm8953).
 
 ## Repository Structure
 
